@@ -1,0 +1,3 @@
+drybox/{id}/humidity
+drybox/{id}/temp
+drybox/{id}/battery

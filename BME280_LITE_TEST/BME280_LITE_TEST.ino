@@ -1,29 +1,69 @@
-/*
-  This is the test for the BME280_LITE library.
-  This library only works with I2C. The device's address is 0x76 or 0x77.
-  The objective of the library is to be as simple and as lightweight as possible.
-  Version = 2.1.0 (added support for custom TwoWire objects for multiple I2C buses)
-  
-  Written by Edward Sicoe.
-*/
-
 #include <BME280_LITE.h>
+#include <PubSubClient.h>
+#include <WiFi.h>
+#include "battery.h"
+#include "mqttwrapper.h"
 
-#define BME_ADDR    0x76 // Primary address (0x77 is the alternate)
-#define SEA_LEVEL_PRES  1017.8 // sea level pressure in hPa to use in the readAltitude function.
+#define BME_ADDR 0x76
+#define SDA_PIN 22
+#define SCL_PIN 23
+#define DRYBOX_STATE_TOPIC "drybox/state"
+#define MAX_ATTEMPTS 5
+#define SLEEP_BETWEEN_PUBS 600 //10 Min
+
+#define DEBUG
+
+#ifdef DEBUG
+#define DBG(x) Serial.println(x)
+#else
+#define DBG(x) do {} while (0)
+#endif
 
 BME280_LITE bme;
+
+char* mqtt_server = "neptune4";
+int mqtt_port = 1883;
+char* mqtt_clientId = "drybox_1";
+
+MqttWrapper mqtt(mqtt_server, mqtt_port, mqtt_clientId);
+
+struct Measurement {
+  float humidity;
+  float temperature;
+  float battery_level;
+};
+
+void mqttPublishState(){
+   if(!mqtt.connect(MAX_ATTEMPTS)){
+      DBG("MQTT Connection failed");
+   } else {
+      Measurement m;
+      BME_SensorData temperature = bme.readTemperature(BME_ADDR); 
+      BME_SensorData humidity = bme.readHumidity(BME_ADDR);
+      m.temperature = temperature.data;
+      m.humidity = humidity.data;
+      m.battery_level = getVbatt();
+      
+      char payload[100];      
+      mqtt.publish(DRYBOX_STATE_TOPIC, payload);
+      DBG("Published MQTT State:");
+      DBG(payload);
+      mqtt.disconnect();
+   }
+}
+
+void goToSleep(uint64_t sleepTimeSec) {
+  DBG("Going to sleep now");
+  esp_sleep_enable_timer_wakeup(sleepTimeSec * 1000000ULL);
+  esp_deep_sleep_start();
+}
 
 void setup() {
   Serial.begin(9600);
   
-  // Option 2: Use custom I2C pins (ESP32 example)
-  #define SDA_PIN 22
-  #define SCL_PIN 23
+  Wire.begin(SDA_PIN, SCL_PIN); 
   
-  Wire.begin(SDA_PIN, SCL_PIN);  // Initialize with custom pins
-  
-  if (!bme.begin(&Wire,          // Pass the Wire object
+  if (!bme.begin(&Wire,         
                  BME_ADDR, 
                  BME_H_X1, 
                  BME_T_X1, 
@@ -31,57 +71,33 @@ void setup() {
                  BME_NORMAL, 
                  BME_TSB_0_5MS, 
                  BME_FILTER_2)) {
-    Serial.println("BME280 initialization failed!");
+    DBG("BME280 initialization failed!");
     while(1);
   }
-  
   
   if (!bme.calibrate(BME_ADDR)) {
-    Serial.println("BME280 calibration failed!");
+    DBG("BME280 calibration failed!");
     while(1);
   }
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(100);
+  }
+
+  if(WiFi.status() == WL_CONNECTED){
+    delay(500);
+  }
+
+  mqttPublishState();
   
-  Serial.println("BME280 initialized successfully!");
+  goToSleep(SLEEP_BETWEEN_PUBS);
+
 }
 
 void loop() {
-/* 
-Note: all read functions return a struct with a "isValid" boolean followed by a float "data".
-The struct BME_SensorData is used since a failed I2C transaction means that "isValid" is false.
-Reading when isValid is false means the read function is simply reading noise from the pin and is outputing false data.
-*/
 
-  BME_SensorData temperature = bme.readTemperature(BME_ADDR); 
-  if (!temperature.isValid) {
-    Serial.println("TEMP READ FAIL");
-  } else {
-    Serial.print("Temperatur: ");
-    Serial.println(temperature.data);
-  }
-  
-  BME_SensorData pressure = bme.readPressure(BME_ADDR);
-  if (!pressure.isValid) {
-    Serial.println("PRESSURE READ FAIL");
-  } else {
-    Serial.print("Luftdruck: ");
-    Serial.println(pressure.data);
-  }
-
-  BME_SensorData humidity = bme.readHumidity(BME_ADDR);
-  if (!humidity.isValid) {
-    Serial.println("HUMIDITY READ FAIL");
-  } else {
-    Serial.print("Luftfeuchtigkeit: ");
-    Serial.println(humidity.data);
-  }
-  
-  BME_SensorData altitude = bme.readAltitude(BME_ADDR, SEA_LEVEL_PRES);
-  if (!altitude.isValid) {
-    Serial.println("ALTITUDE READ FAIL");
-  } else {
-    Serial.print("Höhe (Ungenau): ");
-    Serial.println(altitude.data);
-  }
-
-  delay(1000);
 }
