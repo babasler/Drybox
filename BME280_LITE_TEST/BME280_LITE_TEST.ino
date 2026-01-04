@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include "battery.h"
 #include "mqttwrapper.h"
+#include <ArduinoJson.h>
 
 #define BME_ADDR 0x76
 #define SDA_PIN 22
@@ -40,11 +41,19 @@ void mqttPublishState(){
       Measurement m;
       BME_SensorData temperature = bme.readTemperature(BME_ADDR); 
       BME_SensorData humidity = bme.readHumidity(BME_ADDR);
-      m.temperature = temperature.data;
-      m.humidity = humidity.data;
+      m.temperature = round(temperature.data * 10.0) / 10.0;
+      m.humidity = round(humidity.data * 10.0) / 10.0;
       m.battery_level = getVbatt();
       
-      char payload[100];      
+      StaticJsonDocument<200> doc;
+      // Werte setzen
+      doc["id"] = "3";
+      doc["temperature"] = m.temperature;
+      doc["humidity"] = m.humidity;
+      doc["battery_level"] = m.battery_level;
+      // Serialisieren in Char-Array
+      char payload[200];
+      serializeJson(doc, payload);  
       mqtt.publish(DRYBOX_STATE_TOPIC, payload);
       DBG("Published MQTT State:");
       DBG(payload);
@@ -90,11 +99,14 @@ void setup() {
 
   if(WiFi.status() == WL_CONNECTED){
     delay(500);
+    DBG("WIFI OK");
+    mqttPublishState();
   }
-
-  mqttPublishState();
+  else {
+    DBG("WIFI NOT OK");
+  }
   
-  goToSleep(SLEEP_BETWEEN_PUBS);
+  //goToSleep(SLEEP_BETWEEN_PUBS);
 
 }
 
