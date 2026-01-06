@@ -43,11 +43,11 @@ void mqttPublishState(){
       BME_SensorData humidity = bme.readHumidity(BME_ADDR);
       m.temperature = round(temperature.data * 10.0) / 10.0;
       m.humidity = round(humidity.data * 10.0) / 10.0;
-      m.battery_level = getVbatt();
+      m.battery_level = round(getVbatt() * 10.0) / 10.0;
       
       StaticJsonDocument<200> doc;
       // Werte setzen
-      doc["id"] = "3";
+      doc["id"] = "1";
       doc["temperature"] = m.temperature;
       doc["humidity"] = m.humidity;
       doc["battery_level"] = m.battery_level;
@@ -105,11 +105,14 @@ void setup() {
   else {
     DBG("WIFI NOT OK");
   }
+
+  vTaskDelay(pdMS_TO_TICKS(5000));
   
   //goToSleep(SLEEP_BETWEEN_PUBS);
 
 }
 
 void loop() {
-
+  mqttPublishState();
+  vTaskDelay(pdMS_TO_TICKS(1 * 60 * 1000));
 }

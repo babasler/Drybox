@@ -3,12 +3,11 @@
 float getVbatt()
 {
   uint32_t Vbatt = 0;
-  //for (int i = 0; i < 16; i++)
-  //{
-    //Vbatt += analogReadMilliVolts(A0); // Read and accumulate ADC voltage
-  //}
-  //return (2 * Vbatt / 16 / 1000.0); // Adjust for 1:2 divider and convert to volts
-  return 50;
+  for (int i = 0; i < 16; i++)
+  {
+    Vbatt += analogReadMilliVolts(A0); // Read and accumulate ADC voltage
+  }
+  return (2 * Vbatt / 16 / 1000.0); // Adjust for 1:2 divider and convert to volts
 }
 
 uint8_t mapFloat(float x, float in_min, float in_max)
